@@ -191,23 +191,7 @@
         rgba(180,160,100,0.18) 31px
       );
     }
-
-    .receipt-watermark {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) rotate(-30deg);
-      font-size: 1.5rem;
-      font-weight: 900;
-      color: rgba(212,175,55,0.12);
-      white-space: nowrap;
-      pointer-events: none;
-      letter-spacing: 4px;
-      text-transform: uppercase;
-      font-family: 'Segoe UI', system-ui;
-      z-index: 0;
-    }
-
+    
     .receipt-inner > * {
       position: relative;
       z-index: 1;
@@ -434,7 +418,6 @@
   <div class="receipt-area">
     <div class="receipt-card" id="receiptContainer">
       <div class="receipt-inner">
-        <div class="receipt-watermark">E-RECEIPTS by SALIM_J</div>
         <div id="liveReceipt"></div>
       </div>
     </div>

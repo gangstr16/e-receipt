@@ -630,33 +630,10 @@
     el.style.width = '520px'; el.style.minWidth = '520px'; el.style.maxWidth = '520px';
     var canvas = await html2canvas(el, { scale: 2.5, backgroundColor: '#ffffff', logging: false });
     el.style.cssText = prev;
-    var dataUrl = canvas.toDataURL('image/png');
-
-    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-    var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
-    if (isIOS || isSafari) {
-      // iOS/Safari: open image in new tab — user can long-press to save to Photos
-      var newTab = window.open();
-      if (newTab) {
-        newTab.document.write(
-          '<html><head><title>' + filename + '</title></head><body style="margin:0;background:#000;">' +
-          '<p style="color:white;font-family:sans-serif;text-align:center;padding:12px;font-size:14px;">' +
-          '📸 Press and hold the image below, then tap <strong>Save to Photos</strong></p>' +
-          '<img src="' + dataUrl + '" style="width:100%;display:block;">' +
-          '</body></html>'
-        );
-        newTab.document.close();
-      } else {
-        alert('Please allow popups to save images on iOS, or use the PDF option instead.');
-      }
-    } else {
-      var link = document.createElement('a');
-      link.download = filename + '.png';
-      link.href = dataUrl;
-      link.click();
-    }
-
+    var link = document.createElement('a');
+    link.download = filename + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
     savedReceipts[filename + '.png'] = true;
     persistSaved(); updateLastSaved();
   }

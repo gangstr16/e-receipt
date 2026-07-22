@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>Receipt Builder</title>
+  <title>E-Receipt Builder</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#d4af37">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="E-Receipt">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <style>
@@ -332,7 +338,7 @@
         <label>🏢 Select Estate</label>
         <select id="estateName">
           <option value="HNA">HN Apartments — Kyanja</option>
-          <option value="RUE">Ruter Estate — Gayaza</option>
+          <option value="KKE">KK Estate — Kabalagala</option>
           <option value="KIE">Kitinda Estate — Entebbe</option>
           <option value="RUE2">Ruter Estate — Lubowa / Garuga</option>
           <option value="NAC">Nakku Courts — Kisugu</option>
@@ -352,6 +358,7 @@
             </div>
           </div>
         </div>
+        <div id="lastSavedLabel" style="margin-top:6px;font-size:0.82rem;color:#888;">Last saved: <strong id="lastSavedValue">None</strong></div>
       </div>
 
       <div class="field">
@@ -409,7 +416,7 @@
 <script>
   var ESTATES = {
     'HNA':  { name: 'HN APARTMENTS',  location: 'Kyanja',          tel: '0758778469 | 0704934823', prefix: 'HNA:',  folder: 'HN Apartments - Kyanja'       },
-    'RUE':  { name: 'RUTER ESTATE',   location: 'Gayaza',          tel: '0758778469 | 0704934823', prefix: 'RUE:',  folder: 'Ruter Estate - Gayaza'        },
+    'KKE':  { name: 'KK ESTATE',      location: 'Kabalagala',      tel: '0758778469 | 0704934823', prefix: 'KKE:',  folder: 'KK Estate - Kabalagala'       },
     'KIE':  { name: 'KITINDA ESTATE', location: 'Entebbe',         tel: '0758778469 | 0704934823', prefix: 'KIE:',  folder: 'Kitinda Estate - Entebbe'     },
     'RUE2': { name: 'RUTER ESTATE',   location: 'Lubowa | Garuga', tel: '0758778469 | 0704934823', prefix: 'RUE2:', folder: 'Ruter Estate - Garuga_Lubowa'  },
     'NAC':  { name: 'NAKKU COURTS',   location: 'Kisugu',          tel: '0758778469',              prefix: 'NAC:',  folder: 'Nakku Courts - Kisugu'        },
@@ -541,7 +548,7 @@
         '<span><strong>UGX ' + amtDisplay + '</strong><br>(' + numberToWords(amtNum) + ' Shillings only)</span>' +
       '</div>' +
 
-      // 8. Bank/Cash + Signed + Balance
+      // 8. Cash/Cheque + Signed + Balance
       '<div class="inline-group">' +
         '<div><strong>💵 Cash/Bank:</strong> ' + escapeHtml(cashChequeVal) + '</div>' +
         '<div><strong>✍️ Signed:</strong> '      + escapeHtml(signedVal)     + '</div>' +
@@ -560,41 +567,116 @@
       '</div>';
   }
 
+  // localStorage tracking
+  var STORAGE_KEY = 'ereceiptSavedFiles';
+  var savedReceipts = {};
+  try { var _s = localStorage.getItem(STORAGE_KEY); if (_s) savedReceipts = JSON.parse(_s); } catch(e) {}
+
+  function persistSaved() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedReceipts)); } catch(e) {}
+  }
+
   function getReceiptFilename() {
     var estate = ESTATES[estateSelect.value] || ESTATES['HNA'];
-    var num    = String(parseInt(receiptNoInput.value) || 1).padStart(4, '0');
-    return estate.prefix.replace(':','') + num;  // e.g. HNA0001
+    var num = String(parseInt(receiptNoInput.value) || 1).padStart(4, '0');
+    return estate.prefix.replace(':','') + num;
+  }
+
+  function updateLastSaved() {
+    var estate = ESTATES[estateSelect.value] || ESTATES['HNA'];
+    var prefix = estate.prefix.replace(':', '');
+    var keys = Object.keys(savedReceipts).filter(function(k) { return k.startsWith(prefix); });
+    var el = document.getElementById('lastSavedValue');
+    if (!el) return;
+    if (keys.length === 0) { el.textContent = 'None'; return; }
+    var nums = keys.map(function(k) { var m = k.match(/(\d+)/); return m ? parseInt(m[1]) : 0; });
+    el.textContent = prefix + String(Math.max.apply(null, nums)).padStart(4,'0');
+  }
+
+  function getNextDuplicateName(base, ext) {
+    var count = 1;
+    while (savedReceipts[base + '(' + count + ').' + ext]) count++;
+    return base + '(' + count + ')';
+  }
+
+  function showConfirmPopup(base, ext, onConfirm) {
+    var old = document.getElementById('confirmPopup'); if (old) old.remove();
+    var popup = document.createElement('div');
+    popup.id = 'confirmPopup';
+    popup.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:Segoe UI,system-ui,sans-serif';
+    popup.innerHTML = '<div style="background:#fff;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,0.3);padding:2rem 2.2rem;max-width:420px;width:90%;text-align:center;"><div style="font-size:2.5rem;margin-bottom:0.6rem;">&#128190;</div><div style="font-size:1.1rem;font-weight:700;color:#1e2a3a;margin-bottom:0.5rem;">Save Receipt</div><div style="font-size:0.92rem;color:#555;margin-bottom:1.4rem;line-height:1.6;">Are you sure you want to save this receipt?</div><div style="display:flex;gap:1rem;justify-content:center;"><button id="confirmNo" style="padding:10px 28px;border-radius:20px;border:1px solid #ccc;background:#f5f5f5;font-size:0.95rem;cursor:pointer;font-weight:600;color:#444;">Cancel</button><button id="confirmYes" style="padding:10px 28px;border-radius:20px;border:none;background:#d4af37;color:#fff;font-size:0.95rem;cursor:pointer;font-weight:700;">Yes, Save</button></div></div>';
+    document.body.appendChild(popup);
+    document.getElementById('confirmYes').onclick = function() { popup.remove(); onConfirm(); };
+    document.getElementById('confirmNo').onclick  = function() { popup.remove(); };
+    popup.addEventListener('click', function(e) { if (e.target === popup) popup.remove(); });
+  }
+
+  function showDuplicatePopup(base, ext, onConfirm) {
+    var old = document.getElementById('dupPopup'); if (old) old.remove();
+    var nextName = getNextDuplicateName(base, ext);
+    var popup = document.createElement('div');
+    popup.id = 'dupPopup';
+    popup.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999;font-family:Segoe UI,system-ui,sans-serif';
+    popup.innerHTML = '<div style="background:#fff;border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,0.3);padding:2rem 2.2rem;max-width:420px;width:90%;text-align:center;"><div style="font-size:2.5rem;margin-bottom:0.6rem;">&#9888;&#65039;</div><div style="font-size:1.1rem;font-weight:700;color:#1e2a3a;margin-bottom:0.5rem;">Receipt Already Saved</div><div style="font-size:0.92rem;color:#555;margin-bottom:1.4rem;line-height:1.6;"><strong>' + base + '.' + ext + '</strong> has already been saved.<br>Save a duplicate copy?<br><span style="color:#2c5f7a;font-size:0.85rem;">Will be saved as <strong>' + nextName + '.' + ext + '</strong></span></div><div style="display:flex;gap:1rem;justify-content:center;"><button id="dupNo" style="padding:10px 28px;border-radius:20px;border:1px solid #ccc;background:#f5f5f5;font-size:0.95rem;cursor:pointer;font-weight:600;color:#444;">Cancel</button><button id="dupYes" style="padding:10px 28px;border-radius:20px;border:none;background:#d4af37;color:#fff;font-size:0.95rem;cursor:pointer;font-weight:700;">Yes, Save Copy</button></div></div>';
+    document.body.appendChild(popup);
+    document.getElementById('dupYes').onclick = function() { popup.remove(); onConfirm(nextName); };
+    document.getElementById('dupNo').onclick  = function() { popup.remove(); };
+    popup.addEventListener('click', function(e) { if (e.target === popup) popup.remove(); });
+  }
+
+  async function doSaveImage(filename) {
+    var el = document.getElementById('receiptContainer');
+    var prev = el.style.cssText;
+    el.style.width = '520px'; el.style.minWidth = '520px'; el.style.maxWidth = '520px';
+    var canvas = await html2canvas(el, { scale: 2.5, backgroundColor: '#ffffff', logging: false });
+    el.style.cssText = prev;
+    var link = document.createElement('a');
+    link.download = filename + '.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+    savedReceipts[filename + '.png'] = true;
+    persistSaved(); updateLastSaved();
+  }
+
+  async function doSavePDF(filename) {
+    var el = document.getElementById('receiptContainer');
+    var prev = el.style.cssText;
+    el.style.width = '520px'; el.style.minWidth = '520px'; el.style.maxWidth = '520px';
+    var canvas = await html2canvas(el, { scale: 2.8, backgroundColor: '#ffffff', logging: false });
+    el.style.cssText = prev;
+    var imgData = canvas.toDataURL('image/png');
+    var jsPDF = window.jspdf.jsPDF;
+    var pdf = new jsPDF('p','mm','a4');
+    pdf.addImage(imgData,'PNG',0,0,210,(canvas.height*210)/canvas.width);
+    pdf.save(filename + '.pdf');
+    savedReceipts[filename + '.pdf'] = true;
+    persistSaved(); updateLastSaved();
   }
 
   async function downloadReceiptAsImage() {
-    var el = document.getElementById('receiptContainer');
-    if (!el) return;
+    var el = document.getElementById('receiptContainer'); if (!el) return;
     try {
-      var canvas = await html2canvas(el, { scale: 2.5, backgroundColor: '#ffffff', logging: false });
-      var link = document.createElement('a');
-      link.download = getReceiptFilename() + '.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch(err) { console.error(err); alert('Could not generate image. See console for details.'); }
+      var base = getReceiptFilename();
+      showConfirmPopup(base, 'png', async function() {
+        if (savedReceipts[base + '.png']) { showDuplicatePopup(base, 'png', async function(d) { await doSaveImage(d); }); }
+        else { await doSaveImage(base); }
+      });
+    } catch(err) { console.error(err); alert('Could not generate image.'); }
   }
 
   async function downloadReceiptAsPDF() {
-    var el = document.getElementById('receiptContainer');
-    if (!el) return;
+    var el = document.getElementById('receiptContainer'); if (!el) return;
     try {
-      var canvas   = await html2canvas(el, { scale: 2.8, backgroundColor: '#ffffff', logging: false });
-      var imgData  = canvas.toDataURL('image/png');
-      var jsPDF    = window.jspdf.jsPDF;
-      var imgWidth = 210;
-      var imgHeight= (canvas.height * imgWidth) / canvas.width;
-      var pdf      = new jsPDF('p','mm','a4');
-      pdf.addImage(imgData,'PNG',0,0,imgWidth,imgHeight);
-      pdf.save(getReceiptFilename() + '.pdf');
-    } catch(err) { console.error(err); alert('PDF creation failed. See console for details.'); }
+      var base = getReceiptFilename();
+      showConfirmPopup(base, 'pdf', async function() {
+        if (savedReceipts[base + '.pdf']) { showDuplicatePopup(base, 'pdf', async function(d) { await doSavePDF(d); }); }
+        else { await doSavePDF(base); }
+      });
+    } catch(err) { console.error(err); alert('PDF creation failed.'); }
   }
 
   function bindEvents() {
-    estateSelect.addEventListener('change', function() { updatePrefix(); updateReceiptPreview(); });
+    estateSelect.addEventListener('change', function() { updatePrefix(); updateReceiptPreview(); updateLastSaved(); });
 
     document.getElementById('spinUp').addEventListener('click', function() {
       var v = parseInt(receiptNoInput.value) || 0;
@@ -614,6 +696,7 @@
     });
     document.getElementById('saveImageBtn').addEventListener('click', downloadReceiptAsImage);
     document.getElementById('savePdfBtn').addEventListener('click',   downloadReceiptAsPDF);
+    updateLastSaved();
   }
 
   function init() {
@@ -625,5 +708,12 @@
 
   document.addEventListener('DOMContentLoaded', init);
 </script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('./sw.js');
+      });
+    }
+  </script>
 </body>
 </html>

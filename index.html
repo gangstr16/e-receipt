@@ -653,18 +653,76 @@
     persistSaved(); updateLastSaved();
   }
 
+   function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+           (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  function renderReceiptBlob() {
+    var el = document.getElementById('receiptContainer');
+    var prev = el.style.cssText;
+    el.style.width = '520px'; el.style.minWidth = '520px'; el.style.maxWidth = '520px';
+    return html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false })
+      .then(function(canvas) {
+        return new Promise(function(resolve, reject) {
+          canvas.toBlob(function(b) {
+            if (b) resolve(b); else reject(new Error('toBlob returned null'));
+          }, 'image/png');
+        });
+      })
+      .finally(function() { el.style.cssText = prev; });
+  }
+
+  function showImageSheet(blob, filename) {
+    var old = document.getElementById('imageSheet'); if (old) old.remove();
+    var url = URL.createObjectURL(blob);
+    var file = new File([blob], filename + '.png', { type: 'image/png' });
+    var canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
+
+    var sheet = document.createElement('div');
+    sheet.id = 'imageSheet';
+    sheet.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;padding:12px;box-sizing:border-box;font-family:system-ui,sans-serif';
+    sheet.innerHTML =
+      '<div style="background:#fff;border-radius:16px;max-width:420px;width:100%;max-height:100%;overflow:auto;padding:14px;text-align:center;">' +
+        '<img src="' + url + '" alt="Receipt" style="width:100%;border-radius:8px;">' +
+        '<div style="font-size:0.85rem;color:#555;margin:10px 0;">Press and hold the receipt, then tap <strong>Save to Photos</strong>.</div>' +
+        (canShare ? '<button id="sheetShare" style="padding:10px 24px;border:none;border-radius:20px;background:#d4af37;color:#fff;font-weight:700;font-size:0.95rem;margin-right:8px;">Save / Share</button>' : '') +
+        '<button id="sheetClose" style="padding:10px 24px;border:1px solid #ccc;border-radius:20px;background:#f5f5f5;font-weight:600;font-size:0.95rem;">Close</button>' +
+      '</div>';
+    document.body.appendChild(sheet);
+
+    var shareBtn = document.getElementById('sheetShare');
+    if (shareBtn) shareBtn.onclick = function() {
+      navigator.share({ files: [file], title: filename }).catch(function(e) {
+        if (e.name !== 'AbortError') console.error(e);
+      });
+    };
+    document.getElementById('sheetClose').onclick = function() {
+      sheet.remove(); URL.revokeObjectURL(url);
+    };
+  }
+
   async function downloadReceiptAsImage() {
-    var el = document.getElementById('receiptContainer'); if (!el) return;
+    var btn = document.getElementById('saveImageBtn');
+    if (btn) btn.disabled = true;
     try {
-      var prev = el.style.cssText;
-      el.style.width = '520px'; el.style.minWidth = '520px'; el.style.maxWidth = '520px';
-      var canvas = await html2canvas(el, { scale: 2.5, backgroundColor: '#ffffff', logging: false });
-      el.style.cssText = prev;
-      var link = document.createElement('a');
-      link.download = getReceiptFilename() + '.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch(err) { console.error(err); alert('Could not generate image. See console for details.'); }
+      var blob = await renderReceiptBlob();
+      var name = getReceiptFilename();
+      if (isIOS()) {
+        showImageSheet(blob, name);
+      } else {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = name + '.png';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function() { URL.revokeObjectURL(url); }, 10000);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Could not generate image. See console for details.');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   async function downloadReceiptAsPDF() {

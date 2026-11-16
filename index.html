@@ -678,16 +678,23 @@
       '</div>';
     document.body.appendChild(sheet);
 
+    function closeSheet() {
+      if (sheet.parentNode) sheet.remove();
+      URL.revokeObjectURL(url);
+    }
+
     var shareBtn = document.getElementById('sheetShare');
     if (shareBtn) shareBtn.onclick = function() {
-      navigator.share({ files: [file], title: filename }).catch(function(e) {
-        if (e.name !== 'AbortError') console.error(e);
-      });
+      navigator.share({ files: [file], title: filename })
+        .then(closeSheet)
+        .catch(function(e) {
+          if (e.name !== 'AbortError') console.error(e);
+        });
     };
-    document.getElementById('sheetClose').onclick = function() {
-      sheet.remove(); URL.revokeObjectURL(url);
-    };
+    document.getElementById('sheetClose').onclick = closeSheet;
+    sheet.addEventListener('click', function(e) { if (e.target === sheet) closeSheet(); });
   }
+
 
   async function doSaveImage(filename) {
     var btn = document.getElementById('saveImageBtn');

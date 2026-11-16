@@ -1,4 +1,4 @@
-var CACHE_NAME = 'ereceipt-v1';
+var CACHE_NAME = 'ereceipt-v2';
 var FILES_TO_CACHE = [
   './index.html',
   './manifest.json',
@@ -30,11 +30,16 @@ self.addEventListener('activate', function(event) {
   self.clients.claim();
 });
 
-// Fetch — serve from cache, fall back to network
+// Fetch — network first, fall back to cache when offline
 self.addEventListener('fetch', function(event) {
+  if (event.request.method !== 'GET') return;
   event.respondWith(
-    caches.match(event.request).then(function(response) {
-      return response || fetch(event.request);
+    fetch(event.request).then(function(res) {
+      var copy = res.clone();
+      caches.open(CACHE_NAME).then(function(c) { c.put(event.request, copy); });
+      return res;
+    }).catch(function() {
+      return caches.match(event.request);
     })
   );
 });
